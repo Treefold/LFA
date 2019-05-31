@@ -29,8 +29,8 @@ public:
     friend istream& operator>> (istream &in, Automat &a);
     friend ostream& operator<< (ostream &out, Automat &a);
     void testWords (istream &in, ostream &out);
-    void concat (Automat &a, Automat &b);
     void toDFA (Automat &other);
+    void concat (Automat &a, Automat &b);
 };
 
 int main()
@@ -38,24 +38,124 @@ int main()
     ifstream in ("date.in");
     ofstream out ("date.out");
 
-    Automat a;
-    in >> a;
+    Automat a, b, aa, bb, c, cc;
+    in >> a >> b;
+    a.toDFA (aa);
+    b.toDFA (bb);
+    //cout << aa << bb;
 
-    a.testWords(in, out);
+    c.concat(aa, bb);
+    c.toDFA(cc);
+
+    cout << c << cc;
+
+    //a.testWords(in, out);
 
     in.close();
     out.close();
     return 0;
 }
 
-void Automat:: toDFA (Automat &other)
-{
-    /// after receiving the mark
-}
-
 void Automat:: concat (Automat &a, Automat &b)
 {
-    /// after receiving the mark
+    nrStates = nrSimbols = nrFinalStates = nrTranzitions = initialState = 0;
+    states = initialStates = currentStates = finalStates = set <int> ();
+    simbols = set <char> ();
+    tranzitions = map <pair <int, char>, set <int> > ();
+    map <int, int> aStatesNames, bStatesNames;
+    set <char> ::iterator ic;
+    set <int> ::iterator ii, ij;
+    map <pair <int, char>, set <int> > ::iterator m;
+    pair <int, char> pic;
+    for (ii = a.states.begin(); ii != a.states.end(); ++ii) {
+        states.insert (++nrStates);
+        aStatesNames.insert (make_pair(*ii, nrStates));
+    }
+    initialState = aStatesNames[a.initialState];
+    initialStates.insert (initialState);
+    closure(0);
+    for (ii = b.states.begin(); ii != b.states.end(); ++ii) {
+        states.insert (++nrStates);
+        bStatesNames.insert (make_pair(*ii, nrStates));
+    }
+    nrFinalStates = b.nrFinalStates;
+    for (ii = b.finalStates.begin(); ii != b.finalStates.end(); ++ii) {
+        finalStates.insert (bStatesNames[*ii]);
+    }
+
+    for (ic = a.simbols.begin(); ic != a.simbols.end(); ++ic) {simbols.insert(*ic);}
+    for (ic = b.simbols.begin(); ic != b.simbols.end(); ++ic) {simbols.insert(*ic);}
+    nrSimbols = simbols.size();
+
+    nrTranzitions = a.nrTranzitions + b.nrTranzitions + a.nrFinalStates;
+    currentStates.insert (bStatesNames[b.initialState]);
+    for (ii = a.finalStates.begin(); ii != a.finalStates.end(); ++ii) {
+        tranzitions.insert (make_pair (make_pair(aStatesNames[*ii], lambda), currentStates));
+    }
+    for (ii = a.states.begin(); ii != a.states.end(); ++ii) {
+        for (ic = a.simbols.begin(); ic != a.simbols.end(); ++ic) {
+            if ((m = a.tranzitions.find (make_pair (*ii, *ic))) != a.tranzitions.end()) {
+                pic = make_pair (aStatesNames[*ii], *ic);
+                tranzitions.insert (make_pair (pic, set <int> ()));
+                for (ij = m->second.begin(); ij != m->second.end(); ++ij) {
+                    tranzitions[pic].insert (aStatesNames[*ij]);
+                }
+            }
+        }
+    }
+    for (ii = b.states.begin(); ii != b.states.end(); ++ii) {
+        for (ic = b.simbols.begin(); ic != b.simbols.end(); ++ic) {
+            if ((m = b.tranzitions.find (make_pair (*ii, *ic))) != b.tranzitions.end()) {
+                pic = make_pair (bStatesNames[*ii], *ic);
+                tranzitions.insert (make_pair (pic, set <int> ()));
+                for (ij = m->second.begin(); ij != m->second.end(); ++ij) {
+                    tranzitions[pic].insert (bStatesNames[*ij]);
+                }
+            }
+        }
+    }
+}
+
+void Automat:: toDFA (Automat &other)
+{
+    Automat a, b = *this;
+    a.nrStates = 1;
+    a.states.insert (1);
+    a.nrSimbols = nrSimbols;
+    a.simbols = simbols;
+    a.initialState = 1;
+    a.initialStates.insert(initialState);
+
+    set <set <int> > newStates;
+    map <set <int>, int> newStateName;
+    queue <set <int> > q;
+    newStates.insert(initialStates);
+    newStateName.insert (make_pair (initialStates, 1));
+    q.push (initialStates);
+    set <char> ::iterator ic;
+    set <int> solo;
+
+    while (!q.empty()) {
+        b.initialStates = q.front();
+        q.pop();
+        if (b.inFinalStates (0)) {++a.nrFinalStates; a.finalStates.insert(newStateName[b.initialStates]);}
+        for (ic = simbols.begin(); ic != simbols.end(); ++ic) {
+            b.currentStates = b.initialStates;
+            b.fTransform (*ic);
+            if (b.currentStates.size() == 0) {continue;}
+            if (newStates.find (b.currentStates) == newStates.end()) {
+                newStates.insert (b.currentStates);
+                newStateName.insert (make_pair (b.currentStates, ++a.nrStates));
+                a.states.insert(a.nrStates);
+                q.push (b.currentStates);
+            }
+            ++a.nrTranzitions;
+            solo = set <int> ();
+            solo.insert (newStateName[b.currentStates]);
+            a.tranzitions.insert (make_pair (make_pair(newStateName[b.initialStates], *ic), solo));
+        }
+    }
+    other = a;
 }
 
 void Automat:: testWords (istream &in, ostream &out)
